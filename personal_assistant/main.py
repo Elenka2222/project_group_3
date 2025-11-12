@@ -109,6 +109,150 @@ class AddressBook(UserDict):
         return upcoming
 
 
+# >>> START OF NOTES MODULE =========================================
+
+class Note:
+    def __init__(self, title, content):
+        self.title = title
+        self.content = content
+        self.tags = []
+        self.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def add_tag(self, tag):
+        tag = tag.strip()
+        if tag and tag not in self.tags:
+            self.tags.append(tag)
+
+    def __str__(self):
+        tags_str = f", tags: {', '.join(self.tags)}" if self.tags else ""
+        return f"[{self.title}] {self.content} (created {self.created_at}){tags_str}"
+
+
+class NotesBook(UserDict):
+    def __init__(self):
+        super().__init__()
+        self.next_id = 1
+
+    def add_note(self, title, content):
+        note = Note(title.strip(), content.strip())
+        key = str(self.next_id)
+        self.data[key] = note
+        self.next_id += 1
+        return key
+
+    def edit_note(self, key, new_content):
+        if key in self.data:
+            self.data[key].content = new_content.strip()
+        else:
+            raise KeyError("Note not found.")
+
+    def delete_note(self, key):
+        if key in self.data:
+            del self.data[key]
+        else:
+            raise KeyError("Note not found.")
+
+    def all_notes(self):
+        return [(key, note) for key, note in sorted(self.data.items())]
+
+    def search(self, query):
+        query_lower = query.lower()
+        return [(key, note) for key, note in self.data.items()
+                if query_lower in note.content.lower() or query_lower in note.title.lower()]
+
+    def search_by_tag(self, tag):
+        tag_lower = tag.lower()
+        return [(key, note) for key, note in self.data.items()
+                if any(t.lower() == tag_lower for t in note.tags)]
+
+
+def save_notes(notes, filename="notes.pkl"):
+    with open(filename, "wb") as f:
+        pickle.dump(notes, f)
+
+def load_notes(filename="notes.pkl"):
+    try:
+        with open(filename, "rb") as f:
+            notes = pickle.load(f)
+        if notes.data:
+            notes.next_id = max(map(int, notes.data.keys())) + 1
+        else:
+            notes.next_id = 1
+        return notes
+    except FileNotFoundError:
+        return NotesBook()
+
+
+# ==================== CLI Commands ====================
+
+def add_note(args, notes):
+    if len(args) < 2:
+        return "Usage: add-note <title> <content>"
+    title = args[0]
+    content = ' '.join(args[1:])
+    key = notes.add_note(title, content)
+    return f"Note '{title}' added with id {key}."
+
+def show_note(args, notes):
+    if len(args) != 1:
+        return "Usage: show-note <id>"
+    key = args[0]
+    if key in notes.data:
+        return f"{key}: {notes.data[key]}"
+    return "Note not found."
+
+def all_notes_func(args, notes):
+    result = notes.all_notes()
+    if not result:
+        return "No notes found."
+    return "\n".join([f"{key}: {note}" for key, note in result])
+
+def edit_note(args, notes):
+    if len(args) < 2:
+        return "Usage: edit-note <id> <new content>"
+    key = args[0]
+    new_content = ' '.join(args[1:])
+    notes.edit_note(key, new_content)
+    return "Note edited."
+
+def delete_note(args, notes):
+    if len(args) != 1:
+        return "Usage: delete-note <id>"
+    key = args[0]
+    notes.delete_note(key)
+    return "Note deleted."
+
+def find_notes(args, notes):
+    if not args:
+        return "Usage: find-notes <text>"
+    query = ' '.join(args)
+    found = notes.search(query)
+    if not found:
+        return "No matches."
+    return "\n".join([f"{key}: {note}" for key, note in found])
+
+def add_tag(args, notes):
+    if len(args) < 2:
+        return "Usage: add-tag <id> <tag1> [tag2]..."
+    key = args[0]
+    tags = args[1:]
+    if key not in notes.data:
+        return "Note not found."
+    for tag in tags:
+        notes.data[key].add_tag(tag)
+    return f"Tags added to note {key}: {', '.join(tags)}"
+
+def find_by_tag(args, notes):
+    if len(args) != 1:
+        return "Usage: find-by-tag <tag>"
+    tag = args[0]
+    results = notes.search_by_tag(tag)
+    if not results:
+        return "No notes found with this tag."
+    return "\n".join([f"{key}: {note}" for key, note in results])
+
+# <<< END OF NOTES MODULE ===========================================
+
 def parse_input(user_input):
     parts = user_input.strip().split()
     if not parts:
@@ -240,6 +384,8 @@ def load_data(filename="addressbook.pkl"):
 
 def main():
     book = load_data()
+    notes = load_notes()
+
     print("Welcome to the assistant bot!")
 
     while True:
@@ -248,6 +394,7 @@ def main():
 
         if command in ["close", "exit"]:
             save_data(book)
+            save_notes(notes)
             print("Good bye!")
             break
 
@@ -274,6 +421,26 @@ def main():
 
         elif command == "birthdays":
             print(birthdays(args, book))
+
+# >>> Notes CLI Commands
+
+        elif command == "add-note":
+            print(add_note(args, notes))
+        elif command == "show-note":
+            print(show_note(args, notes))
+        elif command == "edit-note":
+            print(edit_note(args, notes))
+        elif command == "delete-note":
+            print(delete_note(args, notes))
+        elif command == "all-notes":
+            print(all_notes_func(args, notes))
+        elif command == "find-notes":
+            print(find_notes(args, notes))
+        elif command == "add-tag":
+            print(add_tag(args, notes))
+        elif command == "find-by-tag":
+            print(find_by_tag(args, notes))  
+
 
         else:
             print("Invalid command.")
