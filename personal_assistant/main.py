@@ -147,18 +147,25 @@ class AddressBook(UserDict):
 
 class Note:
     def __init__(self, title, content):
-        self.title = title
-        self.content = content
+        self.title = title.strip()
+        self.content = content.strip()
         self.tags = []
         self.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def add_tag(self, tag):
-        tag = tag.strip()
+        tag = tag.strip().lower()
         if tag and tag not in self.tags:
             self.tags.append(tag)
 
+    def remove_tag(self, tag):
+        tag = tag.strip().lower()
+        if tag in self.tags:
+            self.tags.remove(tag)
+            return True
+        return False
+            
     def __str__(self):
-        tags_str = f", tags: {', '.join(self.tags)}" if self.tags else ""
+        tags_str = f", tags: #{', #'.join(self.tags)}" if self.tags else ""
         return f"[{self.title}] {self.content} (created {self.created_at}){tags_str}"
 
 
@@ -191,13 +198,29 @@ class NotesBook(UserDict):
 
     def search(self, query):
         query_lower = query.lower()
-        return [(key, note) for key, note in self.data.items()
-                if query_lower in note.content.lower() or query_lower in note.title.lower()]
+        results = []
+        for key, note in self.data.items():
+            title_matches = note.title.lower().count(query_lower)
+            content_matches = note.content.lower().count(query_lower)
+            tags_matches = sum(1 for tag in note.tags if query_lower in tag)
 
-    def search_by_tag(self, tag):
-        tag_lower = tag.lower()
-        return [(key, note) for key, note in self.data.items()
-                if any(t.lower() == tag_lower for t in note.tags)]
+            total_matches = title_matches + content_matches + tags_matches
+            if total_matches > 0:
+                results.append((total_matches, key, note))
+
+        results.sort(reverse=True, key=lambda x: x[0])
+        return [(key, note) for _, key, note in results]
+
+    def search_by_tags(self, tags):
+        tags = {t.strip().lower() for t in tags}
+        results = []
+        for key, note in self.data.items():
+            note_tags = {t.lower() for t in note.tags}
+            matches = len(note_tags.intersection(tags))
+            if matches > 0:
+                results.append((matches, key, note))
+        results.sort(reverse=True)  # за кількістю збігів тегів
+        return [(key, note) for _, key, note in results]
 
 
 def save_notes(notes, filename="notes.pkl"):
@@ -284,6 +307,36 @@ def find_by_tag(args, notes):
     if not results:
         return "No notes found with this tag."
     return "\n".join([f"{key}: {note}" for key, note in results])
+
+def remove_tag(args, notes):
+    if len(args) != 2:
+        return "Usage: remove-tag <id> <tag>"
+    key, tag_to_remove = args
+    if key not in notes.data:
+        return "Note not found."
+    note = notes.data[key]
+    if note.remove_tag(tag_to_remove):
+        return f"Tag '#{tag_to_remove}' removed from note {key}."
+    return f"Tag '#{tag_to_remove}' not found in note {key}."
+
+
+def search_notes(args, notes):
+    if not args:
+        return "Usage: search-notes <query>"
+    query = ' '.join(args)
+    results = notes.search(query)
+    if not results:
+        return f"No results for: '{query}'"
+    return "Search results:\n" + "\n".join(f"{k}: {n}" for k, n in results)
+
+
+def filter_notes_by_tag(args, notes):
+    if not args:
+        return "Usage: filter-notes-by-tag <tag1> [tag2] ..."
+    results = notes.search_by_tags(args)
+    if not results:
+        return f"No notes with tags: {', '.join('#' + t for t in args)}"
+    return "Found by tags:\n" + "\n".join(f"{k}: {n}" for k, n in results)
 
 # <<< END OF NOTES MODULE ===========================================
 
@@ -494,13 +547,23 @@ def main():
             print(delete_note(args, notes))
         elif command == "all-notes":
             print(all_notes_func(args, notes))
-        elif command == "find-notes":
-            print(find_notes(args, notes))
+
         elif command == "add-tag":
             print(add_tag(args, notes))
-        elif command == "find-by-tag":
-            print(find_by_tag(args, notes))  
+        elif command == "remove-tag":
+            print(remove_tag(args, notes))
 
+        elif command == "search-notes":
+            print(search_notes(args, notes))
+
+        elif command == "find-by-tag":
+            if len(args) != 1:
+                print("Usage: find-by-tag <tag>")
+            else:
+                print(find_by_tag(args, notes))
+
+        elif command == "filter-notes-by-tag":
+            print(filter_notes_by_tag(args, notes))
 
         else:
             print("Invalid command.")
