@@ -1,6 +1,8 @@
 from collections import UserDict
 from datetime import datetime, timedelta
 import pickle
+import re
+
 
 def input_error(func):
     def inner(*args, **kwargs):
@@ -46,12 +48,30 @@ class Birthday(Field):
     def to_date(self):
         day, month, year = map(int, self.value.split('.'))
         return datetime(year, month, day).date()
+    
+class Address(Field):
+    def __init__(self, value):
+        if not value.strip():
+            raise ValueError("Address cannot be empty.")
+        super().__init__(value.strip())
+
+class Email(Field):
+    regex = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    
+    def __init__(self, value):
+        if not value.strip():
+            raise ValueError("Email cannot be empty.")
+        if not self.regex.match(value.strip()):
+            raise ValueError("Invalid email format.")
+        super().__init__(value.strip().lower())
 
 class Record:
     def __init__(self, name):
         self.name = Name(name)
         self.phones = []
         self.birthday = None
+        self.address = None        # Нове поле
+        self.emails = []           # Нове поле (можна кілька)
 
     def add_phone(self, phone):
         self.phones.append(Phone(phone))
@@ -68,10 +88,24 @@ class Record:
             raise ValueError("Birthday already set.")
         self.birthday = Birthday(birthday_str)
 
+    # Нові методи
+    def add_address(self, address_str):
+        if self.address is not None:
+            raise ValueError("Address already set.")
+        self.address = Address(address_str)
+
+    def add_email(self, email_str):
+        email = Email(email_str)
+        if email in self.emails:
+            raise ValueError(f"Email {email.value} already exists.")
+        self.emails.append(email)
+
     def __str__(self):
         phones_str = '; '.join(p.value for p in self.phones) if self.phones else "none"
         birthday_str = f", birthday: {self.birthday.value}" if self.birthday else ""
-        return f"Contact name: {self.name.value}, phones: {phones_str}{birthday_str}"
+        address_str = f", address: {self.address.value}" if self.address else ""
+        emails_str = f", emails: {'; '.join(e.value for e in self.emails)}" if self.emails else ""
+        return f"Contact name: {self.name.value}, phones: {phones_str}{birthday_str}{address_str}{emails_str}"
 
 
 class AddressBook(UserDict):
@@ -260,48 +294,46 @@ def parse_input(user_input):
     return parts[0].lower(), parts[1:]
 
 
-@input_error
-def add_contact(args, book: AddressBook):
-    if len(args) < 2:
-        return "Enter name and at least one phone.\nExample: add <name> <phone1> [phone2]..."
+@input_error  #Рішення: дозволити створювати контакт без телефону 
+def add_contact(args, book: AddressBook):   
+    if len(args) < 1:
+        return "Enter at least a name.\nExample: add <name> [phone1] [phone2]..."
 
     name = args[0]
     phones = args[1:]
 
-    
-    if name.isdigit() and len(name) == 50:
-        return "Name cannot be a phone number. Use a real name."
+    # Перевірка, щоб ім'я не виглядало як телефон
+    if name.isdigit() and len(name) == 10:
+        return "Name cannot be a 10-digit number. Use a real name."
 
     valid_phones = []
     for phone in phones:
         if phone.isdigit() and len(phone) == 10:
             valid_phones.append(phone)
         else:
-            return f"Invalid phone '{phone}': must be 10 digits."
-
-    if not valid_phones:
-        return "No valid 10-digit phones provided."
+            return f"Invalid phone '{phone}': must be exactly 10 digits."
 
     name_lower = name.lower()
     record = book.find(name_lower)
 
-    if record is not None:
-        message = f"Contact '{name}' already exists. Adding phone(s)..."
-    else:
+    if record is None:
         record = Record(name)
         book.add_record(record)
         message = "Contact added."
+    else:
+        message = f"Contact '{name}' already exists."
 
     added_phones = []
     for phone in valid_phones:
         if any(p.value == phone for p in record.phones):
-            continue  
+            continue
         record.add_phone(phone)
         added_phones.append(phone)
 
-    if added_phones:
-        return f"{message} Added: {', '.join(added_phones)}"
-    return f"{message} No new phones added."
+    if added_phones: 
+        return f"{message} Added phones: {', '.join(added_phones)}"
+    else:
+        return message + (" No new phones added." if valid_phones else "")  
 
 
 @input_error
@@ -362,7 +394,6 @@ def show_birthday(args, book):
         return f"No birthday set for {record.name.value}."
     return f"{record.name.value}'s birthday: {record.birthday.value}"
 
-
 @input_error
 def birthdays(args, book):
     upcoming = book.get_upcoming_birthdays()
@@ -370,6 +401,29 @@ def birthdays(args, book):
         return "No birthdays in the next 7 days."
     lines = [f"{item['name']} — {item['congratulation_date']}" for item in upcoming]
     return "Upcoming birthdays:\n" + "\n".join(lines)
+
+@input_error
+def add_address(args, book):
+    if len(args) < 2:
+        return "Usage: add-address <name> <address...>"
+    name = args[0]
+    address = ' '.join(args[1:])
+    record = book.find(name)
+    if not record:
+        raise KeyError("Contact not found.")
+    record.add_address(address)
+    return "Address added."
+
+@input_error
+def add_email(args, book):
+    if len(args) != 2:
+        return "Usage: add-email <name> <email>"
+    name, email = args
+    record = book.find(name)
+    if not record:
+        raise KeyError("Contact not found.")
+    record.add_email(email)
+    return "Email added."
 
 def save_data(book, filename="addressbook.pkl"):
     with open(filename, "wb") as f:
@@ -421,6 +475,12 @@ def main():
 
         elif command == "birthdays":
             print(birthdays(args, book))
+
+        elif command == "add-address":
+            print(add_address(args, book))
+
+        elif command == "add-email":
+            print(add_email(args, book))
 
 # >>> Notes CLI Commands
 
