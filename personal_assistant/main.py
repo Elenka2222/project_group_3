@@ -17,6 +17,7 @@ C_INFO = Fore.CYAN
 C_BRIGHT = Style.BRIGHT
 C_RESET = Style.RESET_ALL
 
+
 def input_error(func):
     def inner(*args, **kwargs):
         try:
@@ -31,16 +32,17 @@ def input_error(func):
             return f"Error: {str(e)}"
     return inner
 
+
 class Field:
     def __init__(self, value):
         self.value = value
 
     def __str__(self):
         return str(self.value)
-    
+
     def __repr__(self):
         return str(self.value)
-    
+
 
 class Name(Field):
     pass
@@ -64,22 +66,25 @@ class Birthday(Field):
     def to_date(self):
         day, month, year = map(int, self.value.split('.'))
         return datetime(year, month, day).date()
-    
+
+
 class Address(Field):
     def __init__(self, value):
         if not value.strip():
             raise ValueError("Address cannot be empty.")
         super().__init__(value.strip())
 
+
 class Email(Field):
     regex = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-    
+
     def __init__(self, value):
         if not value.strip():
             raise ValueError("Email cannot be empty.")
         if not self.regex.match(value.strip()):
             raise ValueError("Invalid email format.")
         super().__init__(value.strip().lower())
+
 
 class Record:
     def __init__(self, name):
@@ -117,16 +122,21 @@ class Record:
         self.emails.append(email)
 
     def __str__(self):
-        phones_str = '; '.join(p.value for p in self.phones) if self.phones else "none"
-        birthday_str = f", birthday: {self.birthday.value}" if self.birthday else ""
-        address_str = f", address: {self.address.value}" if self.address else ""
-        emails_str = f", emails: {'; '.join(e.value for e in self.emails)}" if self.emails else ""
-        return f"Contact name: {self.name.value}, phones: {phones_str}{birthday_str}{address_str}{emails_str}"
+        phones_str = '; '.join(p.value for p in self.phones) \
+            if self.phones else "none"
+        birthday_str = f", birthday: {self.birthday.value}" \
+            if self.birthday else ""
+        address_str = f", address: {self.address.value}" \
+            if self.address else ""
+        emails_str = f", emails: {'; '.join(e.value for e in self.emails)}" \
+            if self.emails else ""
+        return f"Contact name: {self.name.value} \
+            , phones: {phones_str}{birthday_str}{address_str}{emails_str}"
 
 
 class AddressBook(UserDict):
     def add_record(self, record):
-        self.data[record.name.value.lower()] = record 
+        self.data[record.name.value.lower()] = record
 
     def find(self, name):
         return self.data.get(name.lower())
@@ -156,8 +166,8 @@ class AddressBook(UserDict):
                     "name": record.name.value,
                     "congratulation_date": congrats_date.strftime("%d.%m.%Y")
                 })
-        return upcoming 
-    
+        return upcoming
+
     def search(self, query):
         query_lower = query.lower()
         results = []
@@ -176,7 +186,7 @@ class AddressBook(UserDict):
             if record.birthday and query_lower in record.birthday.value:
                 results.append(record)
         return results
-    
+
     def edit_email(self, *args):
         try:
             name, old_email, new_email = args[0]
@@ -187,19 +197,19 @@ class AddressBook(UserDict):
             return f"Email для '{name}' оновлено"
         except ValueError:
             return 'edit-email <old> <new>'
-        #except:
-        #    return "Контакт не знайдено"
+        except KeyError:
+            return "Контакт не знайдено"
 
-    #редагування адреси
+    # Редагування адреси
     def edit_address(self, *args):
         try:
             name, *new_address = args[0]
-            new_address = ' '.join(new_address)  
+            new_address = ' '.join(new_address)
             self.data[name].address = Address(new_address)
             return f"Адресу для '{name}' оновлено"
         except ValueError:
             return "edit-address <name> <new address>"
-        except:
+        except KeyError:
             return "Контакт не знайдено"
 
 
@@ -223,10 +233,11 @@ class Note:
             self.tags.remove(tag)
             return True
         return False
-            
+
     def __str__(self):
         tags_str = f", tags: #{', #'.join(self.tags)}" if self.tags else ""
-        return f"[{self.title}] {self.content} (created {self.created_at}){tags_str}"
+        return f"[{self.title}] {self.content} \
+            (created {self.created_at}){tags_str}"
 
 
 class NotesBook(UserDict):
@@ -287,6 +298,7 @@ def save_notes(notes, filename="notes.pkl"):
     with open(filename, "wb") as f:
         pickle.dump(notes, f)
 
+
 def load_notes(filename="notes.pkl"):
     try:
         with open(filename, "rb") as f:
@@ -298,6 +310,7 @@ def load_notes(filename="notes.pkl"):
         return notes
     except FileNotFoundError:
         return NotesBook()
+
 
 @input_error
 def delete_contact(args, book):
@@ -320,6 +333,7 @@ def add_note(args, notes):
     key = notes.add_note(title, content)
     return f"Note '{title}' added with id {key}."
 
+
 def show_note(args, notes):
     if len(args) != 1:
         return "Usage: show-note <id>"
@@ -328,11 +342,13 @@ def show_note(args, notes):
         return f"{key}: {notes.data[key]}"
     return "Note not found."
 
+
 def all_notes_func(args, notes):
     result = notes.all_notes()
     if not result:
         return "No notes found."
     return "\n".join([f"{key}: {note}" for key, note in result])
+
 
 def edit_note(args, notes):
     if len(args) < 2:
@@ -342,12 +358,14 @@ def edit_note(args, notes):
     notes.edit_note(key, new_content)
     return "Note edited."
 
+
 def delete_note(args, notes):
     if len(args) != 1:
         return "Usage: delete-note <id>"
     key = args[0]
     notes.delete_note(key)
     return "Note deleted."
+
 
 def find_notes(args, notes):
     if not args:
@@ -357,6 +375,7 @@ def find_notes(args, notes):
     if not found:
         return "No matches."
     return "\n".join([f"{key}: {note}" for key, note in found])
+
 
 def add_tag(args, notes):
     if len(args) < 2:
@@ -369,6 +388,7 @@ def add_tag(args, notes):
         notes.data[key].add_tag(tag)
     return f"Tags added to note {key}: {', '.join(tags)}"
 
+
 def find_by_tag(args, notes):
     if len(args) != 1:
         return "Usage: find-by-tag <tag>"
@@ -376,6 +396,7 @@ def find_by_tag(args, notes):
     if not results:
         return "No notes found with this tag."
     return "\n".join([f"{key}: {note}" for key, note in results])
+
 
 def remove_tag(args, notes):
     if len(args) != 2:
@@ -409,6 +430,7 @@ def filter_notes_by_tag(args, notes):
 
 # <<< END OF NOTES MODULE ===========================================
 
+
 def parse_input(user_input):
     parts = user_input.strip().split()
     if not parts:
@@ -416,10 +438,11 @@ def parse_input(user_input):
     return parts[0].lower(), parts[1:]
 
 
-@input_error  #Рішення: дозволити створювати контакт без телефону 
-def add_contact(args, book: AddressBook):   
+@input_error  # Рішення: дозволити створювати контакт без телефону
+def add_contact(args, book: AddressBook):
     if len(args) < 1:
-        return "Enter at least a name.\nExample: add <name> [phone1] [phone2]..."
+        return "Enter at least a name.\n \
+            Example: add <name> [phone1] [phone2]..."
 
     name = args[0]
     phones = args[1:]
@@ -452,10 +475,10 @@ def add_contact(args, book: AddressBook):
         record.add_phone(phone)
         added_phones.append(phone)
 
-    if added_phones: 
+    if added_phones:
         return f"{message} Added phones: {', '.join(added_phones)}"
     else:
-        return message + (" No new phones added." if valid_phones else "")  
+        return message + (" No new phones added." if valid_phones else "")
 
 
 @input_error
@@ -487,8 +510,11 @@ def phone_contact(args, book: AddressBook):
 def all_contacts(args, book: AddressBook):
     if not book:
         return "No contacts saved."
-    sorted_records = sorted(book.data.values(), key=lambda r: r.name.value.lower())
+    sorted_records = sorted(
+        book.data.values(), key=lambda r: r.name.value.lower()
+    )
     return "\n".join(str(r) for r in sorted_records)
+
 
 @input_error
 def add_birthday(args, book):
@@ -499,7 +525,8 @@ def add_birthday(args, book):
     if not record:
         raise KeyError
     if record.birthday:
-        return f"Birthday already set for {record.name.value}: {record.birthday.value}"
+        return f"Birthday already set for {record.name.value}: \
+            {record.birthday.value}"
     record.add_birthday(birthday)
     return "Birthday added."
 
@@ -516,6 +543,7 @@ def show_birthday(args, book):
         return f"No birthday set for {record.name.value}."
     return f"{record.name.value}'s birthday: {record.birthday.value}"
 
+
 @input_error
 def birthdays(args, book):
     period = 7
@@ -524,13 +552,22 @@ def birthdays(args, book):
             period = int(args[0])
             if period < 0:
                 raise ValueError
-        except:
+        except ValueError:
             return f"{C_ERROR}Невірна кількість днів.{C_RESET}"
     upcoming = book.get_upcoming_birthdays(period)
     if not upcoming:
-        return f"{C_INFO}Немає днів народження протягом наступних {period} днів.{C_RESET}"
-    lines = [f"{C_BRIGHT}{item['name']}{C_RESET} — {item['congratulation_date']}" for item in upcoming]
-    return f"{C_SUCCESS}Найближчі дні народження:\n" + "\n".join(lines) + C_RESET
+        return f"{C_INFO}Немає днів народження \
+            протягом наступних {period} днів.{C_RESET}"
+
+    lines = [
+                f"{C_BRIGHT}{item['name']}{C_RESET} \
+                — {item['congratulation_date']}"
+                for item in upcoming
+            ]
+
+    return f"{C_SUCCESS}Найближчі дні народження:\n" \
+        + "\n".join(lines) + C_RESET
+
 
 @input_error
 def add_address(args, book):
@@ -544,6 +581,7 @@ def add_address(args, book):
     record.add_address(address)
     return "Address added."
 
+
 @input_error
 def add_email(args, book):
     if len(args) != 2:
@@ -555,9 +593,11 @@ def add_email(args, book):
     record.add_email(email)
     return "Email added."
 
+
 def save_data(book, filename="addressbook.pkl"):
     with open(filename, "wb") as f:
         pickle.dump(book, f)
+
 
 def load_data(filename="addressbook.pkl"):
     try:
@@ -565,6 +605,7 @@ def load_data(filename="addressbook.pkl"):
             return pickle.load(f)
     except FileNotFoundError:
         return AddressBook()  # Нова книга, якщо файл не існує
+
 
 @input_error
 def search_contacts(args, book):
@@ -576,47 +617,67 @@ def search_contacts(args, book):
         return f"{C_WARNING}Збігів не знайдено.{C_RESET}"
     return "\n".join(str(r) for r in results)
 
-    
+
 # ==================== МЕНЮ ДОВІДКИ ====================
 def show_help():
     help_text = f"""
 {C_BRIGHT}{C_WARNING}=== ДОСТУПНІ КОМАНДИ ==={C_RESET}
 
 {C_INFO}Контакти:{C_RESET}
-  {C_BRIGHT}add <ім'я> <телефон1> [телефон2]...{C_RESET}     — додати контакт або телефон
-  {C_BRIGHT}change <ім'я> <старий> <новий>{C_RESET}          — змінити телефон
-  {C_BRIGHT}phone <ім'я>{C_RESET}                            — показати телефони
-  {C_BRIGHT}all{C_RESET}                                     — показати всі контакти
-  {C_BRIGHT}delete <ім'я>{C_RESET}                           — видалити контакт
-  {C_BRIGHT}search <текст>{C_RESET}                            — пошук за ім'ям, телефоном, адресою, email
+  {C_BRIGHT}add <ім'я> <телефон1> [телефон2]...{C_RESET} \
+— додати контакт або телефон
+  {C_BRIGHT}change <ім'я> <старий> <новий>{C_RESET}      \
+— змінити телефон
+  {C_BRIGHT}phone <ім'я>{C_RESET}                        \
+— показати телефони
+  {C_BRIGHT}all{C_RESET}                                 \
+— показати всі контакти
+  {C_BRIGHT}delete <ім'я>{C_RESET}                       \
+— видалити контакт
+  {C_BRIGHT}search <текст>{C_RESET}                      \
+— пошук за ім'ям, телефоном, адресою, email
 
 {C_INFO}Дні народження:{C_RESET}
-  {C_BRIGHT}add-birthday <ім'я> <ДД.ММ.РРРР>{C_RESET}        — додати день народження
-  {C_BRIGHT}show-birthday <ім'я>{C_RESET}                    — показати день народження
-  {C_BRIGHT}birthdays [днів]{C_RESET}                        — найближчі дні народження (за замовчуванням 7)
+  {C_BRIGHT}add-birthday <ім'я> <ДД.ММ.РРРР>{C_RESET}    \
+— додати день народження
+  {C_BRIGHT}show-birthday <ім'я>{C_RESET}                \
+— показати день народження
+  {C_BRIGHT}birthdays [днів]{C_RESET}                    \
+— найближчі дні народження (за замовчуванням 7)
 
 {C_INFO}Додатково:{C_RESET}
-  {C_BRIGHT}add-address <ім'я> <адреса>{C_RESET}             — додати адресу
-  {C_BRIGHT}add-email <ім'я> <email>{C_RESET}                — додати email
+  {C_BRIGHT}add-address <ім'я> <адреса>{C_RESET}         \
+— додати адресу
+  {C_BRIGHT}add-email <ім'я> <email>{C_RESET}            \
+— додати email
 
 {C_INFO}Нотатки:{C_RESET}
-  {C_BRIGHT}add-note <текст>{C_RESET}                        — створити нотатку
-  {C_BRIGHT}search-notes <текст>{C_RESET}                    — пошук за текстом
-  {C_BRIGHT}edit-note <id> <новий текст>{C_RESET}            — редагувати нотатку
-  {C_BRIGHT}delete-note <id>{C_RESET}                        — видалити нотатку
-  {C_BRIGHT}all-notes{C_RESET}                               — показати всі нотатки
-  {C_BRIGHT}add-tag <id> <тег1> [тег2]...{C_RESET}           — додати теги
-  {C_BRIGHT}find-by-tag <тег>{C_RESET}                       — пошук за тегом
-  {C_BRIGHT}filter-notes-by-tag <тег> [тег2]{C_RESET}        — відфільтрувати нотатки за тегами
+  {C_BRIGHT}add-note <текст>{C_RESET}                    \
+— створити нотатку
+  {C_BRIGHT}search-notes <текст>{C_RESET}                \
+— пошук за текстом
+  {C_BRIGHT}edit-note <id> <новий текст>{C_RESET}        \
+— редагувати нотатку
+  {C_BRIGHT}delete-note <id>{C_RESET}                    \
+— видалити нотатку
+  {C_BRIGHT}all-notes{C_RESET}                           \
+— показати всі нотатки
+  {C_BRIGHT}add-tag <id> <тег1> [тег2]...{C_RESET}       \
+— додати теги
+  {C_BRIGHT}find-by-tag <тег>{C_RESET}                   \
+— пошук за тегом
+  {C_BRIGHT}filter-notes-by-tag <тег> [тег2]{C_RESET}    \
+— відфільтрувати нотатки за тегами
 
 {C_INFO}Система:{C_RESET}
-  {C_BRIGHT}hello{C_RESET}                                   — привітання
-  {C_BRIGHT}help{C_RESET}                                    — це меню
-  {C_BRIGHT}close / exit{C_RESET}                            — вийти та зберегти
+  {C_BRIGHT}hello{C_RESET}                                — привітання
+  {C_BRIGHT}help{C_RESET}                                 — це меню
+  {C_BRIGHT}close / exit{C_RESET}                         — вийти та зберегти
 
 {C_BRIGHT}Приклад: add John 1234567890{C_RESET}
 """
-    return help_text.strip()
+    return help_text.strip().ljust(40)
+
 
 def main():
     book = load_data()
@@ -689,7 +750,7 @@ def main():
             print(all_notes_func(args, notes))
 
         elif command == "search":
-                print(search_contacts(args, book))
+            print(search_contacts(args, book))
 
         elif command == "add-tag":
             print(add_tag(args, notes))
