@@ -315,8 +315,7 @@ def add_tag(args, notes):
 def find_by_tag(args, notes):
     if len(args) != 1:
         return "Usage: find-by-tag <tag>"
-    tag = args[0]
-    results = notes.search_by_tag(tag)
+    results = notes.search_by_tags(args)
     if not results:
         return "No notes found with this tag."
     return "\n".join([f"{key}: {note}" for key, note in results])
@@ -612,10 +611,7 @@ def main():
             print(search_notes(args, notes))
 
         elif command == "find-by-tag":
-            if len(args) != 1:
-                print("Usage: find-by-tag <tag>")
-            else:
-                print(find_by_tag(args, notes))
+            print(find_by_tag(args, notes))
 
         elif command == "filter-notes-by-tag":
             print(filter_notes_by_tag(args, notes))
