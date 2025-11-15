@@ -154,6 +154,25 @@ class AddressBook(UserDict):
                     "congratulation_date": congrats_date.strftime("%Y.%m.%d")
                 })
         return upcoming
+    
+    def search(self, query):
+        query_lower = query.lower()
+        results = []
+        for record in self.data.values():
+            if query_lower in record.name.value.lower():
+                results.append(record)
+                continue
+            for phone in record.phones:
+                if query_lower in phone.value:
+                    results.append(record)
+                    break
+            if record.address and query_lower in record.address.value.lower():
+                results.append(record)
+            if record.emails and query_lower in record.emails:
+                results.append(record)
+            if record.birthday and query_lower in record.birthday.value:
+                results.append(record)
+        return results
 
 
 # >>> START OF NOTES MODULE =========================================
@@ -500,6 +519,16 @@ def load_data(filename="addressbook.pkl"):
             return pickle.load(f)
     except FileNotFoundError:
         return AddressBook()  # Нова книга, якщо файл не існує
+
+@input_error
+def search_contacts(args, book):
+    if not args:
+        return f"{C_ERROR}Використання: find <запит>{C_RESET}"
+    query = ' '.join(args)
+    results = book.search(query)
+    if not results:
+        return f"{C_WARNING}Збігів не знайдено.{C_RESET}"
+    return "\n".join(str(r) for r in results)
     
 # ==================== МЕНЮ ДОВІДКИ ====================
 def show_help():
@@ -602,6 +631,9 @@ def main():
             print(delete_note(args, notes))
         elif command == "all-notes":
             print(all_notes_func(args, notes))
+
+        elif command == "find":
+                print(search_contacts(args, book))
 
         elif command == "add-tag":
             print(add_tag(args, notes))
