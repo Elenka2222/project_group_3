@@ -37,7 +37,10 @@ class Field:
 
     def __str__(self):
         return str(self.value)
-
+    
+    def __repr__(self):
+        return str(self.value)
+    
 
 class Name(Field):
     pass
@@ -133,7 +136,7 @@ class AddressBook(UserDict):
         if key in self.data:
             del self.data[key]
 
-    def get_upcoming_birthdays(self):
+    def get_upcoming_birthdays(self, period=7):
         today = datetime.today().date()
         upcoming = []
         for record in self.data.values():
@@ -144,16 +147,60 @@ class AddressBook(UserDict):
             if bday_this_year < today:
                 bday_this_year = bday_this_year.replace(year=today.year + 1)
             delta = (bday_this_year - today).days
-            if 0 <= delta <= 7:
+            if 0 <= delta <= period:
                 congrats_date = bday_this_year
-                if congrats_date.weekday() >= 5:  # Сб или Нд → понедельник
+                if congrats_date.weekday() >= 5:  # субота або неділя
                     days_to_monday = 7 - congrats_date.weekday()
                     congrats_date += timedelta(days=days_to_monday)
                 upcoming.append({
                     "name": record.name.value,
-                    "congratulation_date": congrats_date.strftime("%Y.%m.%d")
+                    "congratulation_date": congrats_date.strftime("%d.%m.%Y")
                 })
-        return upcoming
+        return upcoming 
+    
+    def search(self, query):
+        query_lower = query.lower()
+        results = []
+        for record in self.data.values():
+            if query_lower in record.name.value.lower():
+                results.append(record)
+                continue
+            for phone in record.phones:
+                if query_lower in phone.value:
+                    results.append(record)
+                    break
+            if record.address and query_lower in record.address.value.lower():
+                results.append(record)
+            if record.emails and query_lower in record.emails:
+                results.append(record)
+            if record.birthday and query_lower in record.birthday.value:
+                results.append(record)
+        return results
+    
+    def edit_email(self, *args):
+        try:
+            name, old_email, new_email = args[0]
+            for i, email in enumerate(self.data[name].emails):
+                if str(email) == old_email:
+                    self.data[name].emails[i] = Email(new_email)
+                    break
+            return f"Email для '{name}' оновлено"
+        except ValueError:
+            return 'edit-email <old> <new>'
+        #except:
+        #    return "Контакт не знайдено"
+
+    #редагування адреси
+    def edit_address(self, *args):
+        try:
+            name, *new_address = args[0]
+            new_address = ' '.join(new_address)  
+            self.data[name].address = Address(new_address)
+            return f"Адресу для '{name}' оновлено"
+        except ValueError:
+            return "edit-address <name> <new address>"
+        except:
+            return "Контакт не знайдено"
 
 
 # >>> START OF NOTES MODULE =========================================
@@ -251,6 +298,16 @@ def load_notes(filename="notes.pkl"):
         return notes
     except FileNotFoundError:
         return NotesBook()
+
+@input_error
+def delete_contact(args, book):
+    if len(args) != 1:
+        return f"{C_ERROR}Використання: delete <ім'я>{C_RESET}"
+    name = args[0]
+    if book.find(name.lower()):
+        book.delete(name.lower())
+        return f"{C_SUCCESS}Контакт видалено.{C_RESET}"
+    raise KeyError
 
 
 # ==================== CLI Commands ====================
@@ -461,11 +518,19 @@ def show_birthday(args, book):
 
 @input_error
 def birthdays(args, book):
-    upcoming = book.get_upcoming_birthdays()
+    period = 7
+    if args:
+        try:
+            period = int(args[0])
+            if period < 0:
+                raise ValueError
+        except:
+            return f"{C_ERROR}Невірна кількість днів.{C_RESET}"
+    upcoming = book.get_upcoming_birthdays(period)
     if not upcoming:
-        return "No birthdays in the next 7 days."
-    lines = [f"{item['name']} — {item['congratulation_date']}" for item in upcoming]
-    return "Upcoming birthdays:\n" + "\n".join(lines)
+        return f"{C_INFO}Немає днів народження протягом наступних {period} днів.{C_RESET}"
+    lines = [f"{C_BRIGHT}{item['name']}{C_RESET} — {item['congratulation_date']}" for item in upcoming]
+    return f"{C_SUCCESS}Найближчі дні народження:\n" + "\n".join(lines) + C_RESET
 
 @input_error
 def add_address(args, book):
@@ -500,6 +565,17 @@ def load_data(filename="addressbook.pkl"):
             return pickle.load(f)
     except FileNotFoundError:
         return AddressBook()  # Нова книга, якщо файл не існує
+
+@input_error
+def search_contacts(args, book):
+    if not args:
+        return f"{C_ERROR}Використання: search <запит>{C_RESET}"
+    query = ' '.join(args)
+    results = book.search(query)
+    if not results:
+        return f"{C_WARNING}Збігів не знайдено.{C_RESET}"
+    return "\n".join(str(r) for r in results)
+
     
 # ==================== МЕНЮ ДОВІДКИ ====================
 def show_help():
@@ -512,7 +588,7 @@ def show_help():
   {C_BRIGHT}phone <ім'я>{C_RESET}                            — показати телефони
   {C_BRIGHT}all{C_RESET}                                     — показати всі контакти
   {C_BRIGHT}delete <ім'я>{C_RESET}                           — видалити контакт
-  {C_BRIGHT}find <текст>{C_RESET}                            — пошук за ім'ям, телефоном, адресою, email
+  {C_BRIGHT}search <текст>{C_RESET}                            — пошук за ім'ям, телефоном, адресою, email
 
 {C_INFO}Дні народження:{C_RESET}
   {C_BRIGHT}add-birthday <ім'я> <ДД.ММ.РРРР>{C_RESET}        — додати день народження
@@ -590,6 +666,15 @@ def main():
         elif command == "help":
             print(show_help())
 
+        elif command == "delete":
+            print(delete_contact(args, book))
+
+        elif command == "edit-address":
+            print(book.edit_address(args))
+
+        elif command == "edit-email":
+            print(book.edit_email(args))
+
 # >>> Notes CLI Commands
 
         elif command == "add-note":
@@ -602,6 +687,9 @@ def main():
             print(delete_note(args, notes))
         elif command == "all-notes":
             print(all_notes_func(args, notes))
+
+        elif command == "search":
+                print(search_contacts(args, book))
 
         elif command == "add-tag":
             print(add_tag(args, notes))
