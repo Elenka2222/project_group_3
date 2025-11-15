@@ -1,6 +1,8 @@
 from collections import UserDict
 from datetime import datetime, timedelta
 import pickle
+import re
+
 from colorama import init, Fore, Style
 
 
@@ -59,12 +61,30 @@ class Birthday(Field):
     def to_date(self):
         day, month, year = map(int, self.value.split('.'))
         return datetime(year, month, day).date()
+    
+class Address(Field):
+    def __init__(self, value):
+        if not value.strip():
+            raise ValueError("Address cannot be empty.")
+        super().__init__(value.strip())
+
+class Email(Field):
+    regex = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    
+    def __init__(self, value):
+        if not value.strip():
+            raise ValueError("Email cannot be empty.")
+        if not self.regex.match(value.strip()):
+            raise ValueError("Invalid email format.")
+        super().__init__(value.strip().lower())
 
 class Record:
     def __init__(self, name):
         self.name = Name(name)
         self.phones = []
         self.birthday = None
+        self.address = None        # Нове поле
+        self.emails = []           # Нове поле (можна кілька)
 
     def add_phone(self, phone):
         self.phones.append(Phone(phone))
@@ -81,10 +101,24 @@ class Record:
             raise ValueError("Birthday already set.")
         self.birthday = Birthday(birthday_str)
 
+    # Нові методи
+    def add_address(self, address_str):
+        if self.address is not None:
+            raise ValueError("Address already set.")
+        self.address = Address(address_str)
+
+    def add_email(self, email_str):
+        email = Email(email_str)
+        if email in self.emails:
+            raise ValueError(f"Email {email.value} already exists.")
+        self.emails.append(email)
+
     def __str__(self):
         phones_str = '; '.join(p.value for p in self.phones) if self.phones else "none"
         birthday_str = f", birthday: {self.birthday.value}" if self.birthday else ""
-        return f"Contact name: {self.name.value}, phones: {phones_str}{birthday_str}"
+        address_str = f", address: {self.address.value}" if self.address else ""
+        emails_str = f", emails: {'; '.join(e.value for e in self.emails)}" if self.emails else ""
+        return f"Contact name: {self.name.value}, phones: {phones_str}{birthday_str}{address_str}{emails_str}"
 
 
 class AddressBook(UserDict):
@@ -126,18 +160,25 @@ class AddressBook(UserDict):
 
 class Note:
     def __init__(self, title, content):
-        self.title = title
-        self.content = content
+        self.title = title.strip()
+        self.content = content.strip()
         self.tags = []
         self.created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def add_tag(self, tag):
-        tag = tag.strip()
+        tag = tag.strip().lower()
         if tag and tag not in self.tags:
             self.tags.append(tag)
 
+    def remove_tag(self, tag):
+        tag = tag.strip().lower()
+        if tag in self.tags:
+            self.tags.remove(tag)
+            return True
+        return False
+            
     def __str__(self):
-        tags_str = f", tags: {', '.join(self.tags)}" if self.tags else ""
+        tags_str = f", tags: #{', #'.join(self.tags)}" if self.tags else ""
         return f"[{self.title}] {self.content} (created {self.created_at}){tags_str}"
 
 
@@ -170,13 +211,29 @@ class NotesBook(UserDict):
 
     def search(self, query):
         query_lower = query.lower()
-        return [(key, note) for key, note in self.data.items()
-                if query_lower in note.content.lower() or query_lower in note.title.lower()]
+        results = []
+        for key, note in self.data.items():
+            title_matches = note.title.lower().count(query_lower)
+            content_matches = note.content.lower().count(query_lower)
+            tags_matches = sum(1 for tag in note.tags if query_lower in tag)
 
-    def search_by_tag(self, tag):
-        tag_lower = tag.lower()
-        return [(key, note) for key, note in self.data.items()
-                if any(t.lower() == tag_lower for t in note.tags)]
+            total_matches = title_matches + content_matches + tags_matches
+            if total_matches > 0:
+                results.append((total_matches, key, note))
+
+        results.sort(reverse=True, key=lambda x: x[0])
+        return [(key, note) for _, key, note in results]
+
+    def search_by_tags(self, tags):
+        tags = {t.strip().lower() for t in tags}
+        results = []
+        for key, note in self.data.items():
+            note_tags = {t.lower() for t in note.tags}
+            matches = len(note_tags.intersection(tags))
+            if matches > 0:
+                results.append((matches, key, note))
+        results.sort(reverse=True)  # за кількістю збігів тегів
+        return [(key, note) for _, key, note in results]
 
 
 def save_notes(notes, filename="notes.pkl"):
@@ -264,6 +321,36 @@ def find_by_tag(args, notes):
         return "No notes found with this tag."
     return "\n".join([f"{key}: {note}" for key, note in results])
 
+def remove_tag(args, notes):
+    if len(args) != 2:
+        return "Usage: remove-tag <id> <tag>"
+    key, tag_to_remove = args
+    if key not in notes.data:
+        return "Note not found."
+    note = notes.data[key]
+    if note.remove_tag(tag_to_remove):
+        return f"Tag '#{tag_to_remove}' removed from note {key}."
+    return f"Tag '#{tag_to_remove}' not found in note {key}."
+
+
+def search_notes(args, notes):
+    if not args:
+        return "Usage: search-notes <query>"
+    query = ' '.join(args)
+    results = notes.search(query)
+    if not results:
+        return f"No results for: '{query}'"
+    return "Search results:\n" + "\n".join(f"{k}: {n}" for k, n in results)
+
+
+def filter_notes_by_tag(args, notes):
+    if not args:
+        return "Usage: filter-notes-by-tag <tag1> [tag2] ..."
+    results = notes.search_by_tags(args)
+    if not results:
+        return f"No notes with tags: {', '.join('#' + t for t in args)}"
+    return "Found by tags:\n" + "\n".join(f"{k}: {n}" for k, n in results)
+
 # <<< END OF NOTES MODULE ===========================================
 
 def parse_input(user_input):
@@ -273,48 +360,46 @@ def parse_input(user_input):
     return parts[0].lower(), parts[1:]
 
 
-@input_error
-def add_contact(args, book: AddressBook):
-    if len(args) < 2:
-        return "Enter name and at least one phone.\nExample: add <name> <phone1> [phone2]..."
+@input_error  #Рішення: дозволити створювати контакт без телефону 
+def add_contact(args, book: AddressBook):   
+    if len(args) < 1:
+        return "Enter at least a name.\nExample: add <name> [phone1] [phone2]..."
 
     name = args[0]
     phones = args[1:]
 
-    
-    if name.isdigit() and len(name) == 50:
-        return "Name cannot be a phone number. Use a real name."
+    # Перевірка, щоб ім'я не виглядало як телефон
+    if name.isdigit() and len(name) == 10:
+        return "Name cannot be a 10-digit number. Use a real name."
 
     valid_phones = []
     for phone in phones:
         if phone.isdigit() and len(phone) == 10:
             valid_phones.append(phone)
         else:
-            return f"Invalid phone '{phone}': must be 10 digits."
-
-    if not valid_phones:
-        return "No valid 10-digit phones provided."
+            return f"Invalid phone '{phone}': must be exactly 10 digits."
 
     name_lower = name.lower()
     record = book.find(name_lower)
 
-    if record is not None:
-        message = f"Contact '{name}' already exists. Adding phone(s)..."
-    else:
+    if record is None:
         record = Record(name)
         book.add_record(record)
         message = "Contact added."
+    else:
+        message = f"Contact '{name}' already exists."
 
     added_phones = []
     for phone in valid_phones:
         if any(p.value == phone for p in record.phones):
-            continue  
+            continue
         record.add_phone(phone)
         added_phones.append(phone)
 
-    if added_phones:
-        return f"{message} Added: {', '.join(added_phones)}"
-    return f"{message} No new phones added."
+    if added_phones: 
+        return f"{message} Added phones: {', '.join(added_phones)}"
+    else:
+        return message + (" No new phones added." if valid_phones else "")  
 
 
 @input_error
@@ -375,7 +460,6 @@ def show_birthday(args, book):
         return f"No birthday set for {record.name.value}."
     return f"{record.name.value}'s birthday: {record.birthday.value}"
 
-
 @input_error
 def birthdays(args, book):
     upcoming = book.get_upcoming_birthdays()
@@ -383,6 +467,29 @@ def birthdays(args, book):
         return "No birthdays in the next 7 days."
     lines = [f"{item['name']} — {item['congratulation_date']}" for item in upcoming]
     return "Upcoming birthdays:\n" + "\n".join(lines)
+
+@input_error
+def add_address(args, book):
+    if len(args) < 2:
+        return "Usage: add-address <name> <address...>"
+    name = args[0]
+    address = ' '.join(args[1:])
+    record = book.find(name)
+    if not record:
+        raise KeyError("Contact not found.")
+    record.add_address(address)
+    return "Address added."
+
+@input_error
+def add_email(args, book):
+    if len(args) != 2:
+        return "Usage: add-email <name> <email>"
+    name, email = args
+    record = book.find(name)
+    if not record:
+        raise KeyError("Contact not found.")
+    record.add_email(email)
+    return "Email added."
 
 def save_data(book, filename="addressbook.pkl"):
     with open(filename, "wb") as f:
@@ -475,6 +582,11 @@ def main():
         elif command == "birthdays":
             print(birthdays(args, book))
 
+        elif command == "add-address":
+            print(add_address(args, book))
+
+        elif command == "add-email":
+            print(add_email(args, book))
         elif command == "help":
             print(show_help())
 
@@ -490,13 +602,23 @@ def main():
             print(delete_note(args, notes))
         elif command == "all-notes":
             print(all_notes_func(args, notes))
-        elif command == "find-notes":
-            print(find_notes(args, notes))
+
         elif command == "add-tag":
             print(add_tag(args, notes))
-        elif command == "find-by-tag":
-            print(find_by_tag(args, notes))  
+        elif command == "remove-tag":
+            print(remove_tag(args, notes))
 
+        elif command == "search-notes":
+            print(search_notes(args, notes))
+
+        elif command == "find-by-tag":
+            if len(args) != 1:
+                print("Usage: find-by-tag <tag>")
+            else:
+                print(find_by_tag(args, notes))
+
+        elif command == "filter-notes-by-tag":
+            print(filter_notes_by_tag(args, notes))
 
         else:
             print("Invalid command.")
