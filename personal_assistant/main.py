@@ -37,7 +37,10 @@ class Field:
 
     def __str__(self):
         return str(self.value)
-
+    
+    def __repr__(self):
+        return str(self.value)
+    
 
 class Name(Field):
     pass
@@ -173,6 +176,31 @@ class AddressBook(UserDict):
             if record.birthday and query_lower in record.birthday.value:
                 results.append(record)
         return results
+    
+    def edit_email(self, *args):
+        try:
+            name, old_email, new_email = args[0]
+            for i, email in enumerate(self.data[name].emails):
+                if str(email) == old_email:
+                    self.data[name].emails[i] = Email(new_email)
+                    break
+            return f"Email для '{name}' оновлено"
+        except ValueError:
+            return 'edit-email <old> <new>'
+        #except:
+        #    return "Контакт не знайдено"
+
+    #редагування адреси
+    def edit_address(self, *args):
+        try:
+            name, *new_address = args[0]
+            new_address = ' '.join(new_address)  
+            self.data[name].address = Address(new_address)
+            return f"Адресу для '{name}' оновлено"
+        except ValueError:
+            return "edit-address <name> <new address>"
+        except:
+            return "Контакт не знайдено"
 
 
 # >>> START OF NOTES MODULE =========================================
@@ -547,6 +575,7 @@ def search_contacts(args, book):
     if not results:
         return f"{C_WARNING}Збігів не знайдено.{C_RESET}"
     return "\n".join(str(r) for r in results)
+
     
 # ==================== МЕНЮ ДОВІДКИ ====================
 def show_help():
@@ -638,7 +667,13 @@ def main():
             print(show_help())
 
         elif command == "delete":
-                print(delete_contact(args, book))
+            print(delete_contact(args, book))
+
+        elif command == "edit-address":
+            print(book.edit_address(args))
+
+        elif command == "edit-email":
+            print(book.edit_email(args))
 
 # >>> Notes CLI Commands
 
